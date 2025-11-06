@@ -3,3 +3,6 @@ node_modules/
 *.log
 dist/
 build/
+
+# Generated context artifacts
+immutablex-starknet-migration-context-*.txt
