@@ -1,96 +1,48 @@
 # ImmutableX to Starknet Migration Kit
 
-## Architecture
+## Purpose
+This kit shows how to move an ImmutableX game backend onto Starknet. The repository carries a NestJS service that speaks to Starknet, a set of queue workers for batching player actions, and a Unity client ready to hook into the new API. Everything is trimmed to the pieces you need to study, modify, and ship.
 
-Unity → Backend API → Starknet
+## Components at a Glance
+- **Backend** – NestJS running on Bun. Handles wallet creation, session keys, Bull queues, and the AVNU paymaster.
+- **Unity client** – Minimal C# project with secure key storage helpers for iOS and Android.
+- **Infrastructure** – Redis and Postgres definitions in `docker-compose.yml` plus helper scripts for generating LLM context.
 
-## Tech Stack
+## Getting Started
+1. Install Bun, Docker, and Unity 2022.3.15f1 or later.
+2. In `backend/`, copy `.env.example` to `.env` and supply Starknet RPC, AVNU credentials, and JWT secrets.
+3. Run `bun install` inside `backend/`.
 
-- Backend: NestJS + Bun + Starknet.js
-- Frontend: Unity (C#)
-- Blockchain: Starknet
-- Queue: Redis + Bull
-- Paymaster: AVNU
+### Running the Stack
+Open three terminals:
+1. `docker-compose up redis` – starts the queue store. Add Postgres if you need the database.
+2. `cd backend && bun run dev` – launches the NestJS server on port 3000.
+3. Optional: run `bun test` for unit and e2e coverage.
 
-## Quick Start
+The Unity project can now point to `http://localhost:3000`. Use the provided secure storage classes when persisting keys on device.
 
-### Prerequisites
+## Operational Notes
+- Wallet creation is asynchronous. Each request queues a deployment job handled by Bull with exponential backoff.
+- Session tokens expire after 24 hours and gate which in-game actions a player may call.
+- The transaction batch processor sponsors calls through the AVNU paymaster and monitors receipts to requeue failures.
 
-- Bun installed
-- Docker installed
-- Unity 2022.3.15f1+
-
-### Backend Setup
-
-```bash
-cd backend
-bun install
-cp .env.example .env
-# Edit .env with your configuration
-bun run dev
-```
-
-### Unity Setup
-
-1. Open unity-client in Unity
-2. Import NativeWebSocket
-3. Configure backend URL
-4. Build for mobile
-
-## Features
-
-- ✅ Self-custody wallets
-- ✅ Session keys (24hr)
-- ✅ Transaction batching (100 actions)
-- ✅ AVNU Paymaster
-- ✅ WebSocket real-time
-
-## Environment Variables
-
-Copy `.env.example` to `.env` and configure:
-
-- AVNU_API_KEY
-- JWT_SECRET
-- STARKNET_RPC
-
-## Running Everything Together
-
-### Terminal 1: Start Redis
-```bash
-docker-compose up redis
-```
-
-### Terminal 2: Start Backend
-```bash
-cd backend
-bun run dev
-```
-
-## Verification Checklist
-
-- ✅ Backend Running: http://localhost:3000
-- ✅ Redis Connected: Check logs for connection
-- ✅ Wallet Creation: Test endpoint works
-- ✅ Session Creation: JWT token returned
-- ✅ WebSocket: Can connect from client
-
-## Project Structure
-
+## Project Layout
 ```
 immutablex-starknet-migration/
-├── backend/
+├── backend/                # NestJS service and Bull processors
 │   ├── src/
-│   │   ├── wallet/
-│   │   ├── session/
-│   │   ├── paymaster/
-│   │   ├── game/
-│   │   └── main.ts
-│   ├── package.json
-│   ├── bun.lockb
-│   └── .env
-├── unity-client/
-│   └── (Unity project files)
-├── docker-compose.yml
-├── README.md
-└── .gitignore
+│   │   ├── wallet/         # Wallet creation and deployment queue
+│   │   ├── session/        # JWT sessions and action execution
+│   │   ├── paymaster/      # AVNU integration helpers
+│   │   └── game/           # WebSocket gateway and batch processor
+│   ├── test/               # Bun-based unit and e2e tests
+│   └── package.json
+├── unity-client/           # Unity sample with secure storage plugins
+├── docker-compose.yml      # Redis and Postgres services
+└── generate-context.sh     # Builds a context file for LLM reviews
 ```
+
+## Next Steps
+- Adjust the queue and batch sizes for your production load.
+- Extend the Unity sample with gameplay events tied to the WebSocket gateway.
+- Wire Postgres into the backend once you define persistence needs.
