@@ -52,6 +52,22 @@ Body: { userId: "user123" }
 
 Wallet deployment happens asynchronously. The backend queues each deployment job and processes it with retries.
 
+### Wallet Management Options
+
+**Option 1: Device Storage (POW-style) - TRUE SELF-CUSTODY**
+
+- `POST /wallet/generate` - Returns private key
+- User stores on device
+- No recovery if device lost
+- True decentralization
+
+**Option 2: Backend Managed - BETTER UX**
+
+- `POST /wallet/create` - Backend stores encrypted
+- Can implement recovery
+- Not true self-custody
+- Easier for mainstream users
+
 **Sessions**
 
 Create a session with a wallet address. You get a JWT token that expires in 24 hours:
