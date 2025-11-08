@@ -1,48 +1,107 @@
-# ImmutableX to Starknet Migration Kit
+# ImmutableX to Starknet Migration
 
-## Purpose
-This kit shows how to move an ImmutableX game backend onto Starknet. The repository carries a NestJS service that speaks to Starknet, a set of queue workers for batching player actions, and a Unity client ready to hook into the new API. Everything is trimmed to the pieces you need to study, modify, and ship.
+This project helps you move a game backend from ImmutableX to Starknet. It's a working example, not a framework. Take what you need and change what doesn't fit.
 
-## Components at a Glance
-- **Backend** – NestJS running on Bun. Handles wallet creation, session keys, Bull queues, and the AVNU paymaster.
-- **Unity client** – Minimal C# project with secure key storage helpers for iOS and Android.
-- **Infrastructure** – Redis and Postgres definitions in `docker-compose.yml` plus helper scripts for generating LLM context.
+## What's Here
 
-## Getting Started
-1. Install Bun, Docker, and Unity 2022.3.15f1 or later.
-2. In `backend/`, copy `.env.example` to `.env` and supply Starknet RPC, AVNU credentials, and JWT secrets.
-3. Run `bun install` inside `backend/`.
+The backend runs on NestJS with Bun. It creates wallets, manages session keys, batches transactions, and talks to the AVNU paymaster. The Unity client shows how to store private keys securely on iOS and Android devices.
 
-### Running the Stack
-Open three terminals:
-1. `docker-compose up redis` – starts the queue store. Add Postgres if you need the database.
-2. `cd backend && bun run dev` – launches the NestJS server on port 3000.
-3. Optional: run `bun test` for unit and e2e coverage.
+You'll also find Redis and Postgres in docker-compose, plus a script that builds context files for LLM code reviews.
 
-The Unity project can now point to `http://localhost:3000`. Use the provided secure storage classes when persisting keys on device.
+## Setup
 
-## Operational Notes
-- Wallet creation is asynchronous. Each request queues a deployment job handled by Bull with exponential backoff.
-- Session tokens expire after 24 hours and gate which in-game actions a player may call.
-- The transaction batch processor sponsors calls through the AVNU paymaster and monitors receipts to requeue failures.
+Install Bun, Docker, and Unity 2022.3.15f1 or newer.
 
-## Project Layout
+In the `backend` folder, copy `.env.example` to `.env`. Fill in your Starknet RPC endpoint, AVNU API key, and a JWT secret. Then run `bun install`.
+
+## Running It
+
+Start Redis first:
+
+```bash
+docker-compose up redis
+```
+
+Then start the backend:
+
+```bash
+cd backend
+bun run dev
+```
+
+The server runs on port 3000. Point your Unity client there.
+
+## How It Works
+
+**Wallets**
+
+You can generate wallets two ways. The simple path (POW-style) returns a private key for the client to store:
+
+```bash
+POST /wallet/generate
+# Returns: { privateKey, address, publicKey }
+```
+
+The managed path encrypts the key on the backend:
+
+```bash
+POST /wallet/create
+Body: { userId: "user123" }
+# Returns: { address, publicKey, encryptedPrivateKey, deploymentStatus }
+```
+
+Wallet deployment happens asynchronously. The backend queues each deployment job and processes it with retries.
+
+**Sessions**
+
+Create a session with a wallet address. You get a JWT token that expires in 24 hours:
+
+```bash
+POST /session/create
+Body: { userId: "user123", walletAddress: "0x..." }
+# Returns: { token }
+```
+
+**Game Actions**
+
+Submit actions through the REST API. The backend batches them and sponsors transactions through AVNU:
+
+```bash
+POST /game/action
+Body: {
+  sessionToken: "jwt_token",
+  action: {
+    id: "action_123",
+    method: "game_action",
+    parameters: { ... }
+  }
+}
+```
+
+Actions queue up until there are 100, then they batch and submit. Failed transactions get requeued automatically.
+
+## Project Structure
+
 ```
 immutablex-starknet-migration/
-├── backend/                # NestJS service and Bull processors
+├── backend/
 │   ├── src/
-│   │   ├── wallet/         # Wallet creation and deployment queue
-│   │   ├── session/        # JWT sessions and action execution
-│   │   ├── paymaster/      # AVNU integration helpers
-│   │   └── game/           # WebSocket gateway and batch processor
-│   ├── test/               # Bun-based unit and e2e tests
-│   └── package.json
-├── unity-client/           # Unity sample with secure storage plugins
-├── docker-compose.yml      # Redis and Postgres services
-└── generate-context.sh     # Builds a context file for LLM reviews
+│   │   ├── wallet/         # Wallet generation and deployment
+│   │   ├── session/        # JWT sessions
+│   │   ├── paymaster/      # AVNU integration
+│   │   └── game/           # REST API and batch processor
+│   └── test/               # Unit and e2e tests
+├── unity-client/           # Unity sample with secure storage
+├── docker-compose.yml      # Redis and Postgres
+└── generate-context.sh     # LLM context builder
 ```
 
-## Next Steps
-- Adjust the queue and batch sizes for your production load.
-- Extend the Unity sample with gameplay events tied to the WebSocket gateway.
-- Wire Postgres into the backend once you define persistence needs.
+## Notes
+
+Rate limiting caps wallet creation at 10 requests per minute. Session tokens gate which actions players can call. The transaction batch processor watches receipts and requeues anything that fails.
+
+The Unity secure storage classes handle iOS Keychain and Android Keystore. Use them when storing private keys on device.
+
+## What's Next
+
+Tune batch sizes for your load. Add Postgres if you need persistent storage. Extend the Unity sample with your game logic.
