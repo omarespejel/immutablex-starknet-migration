@@ -9,10 +9,16 @@ export class WalletController {
 
   constructor(private walletService: WalletService) {}
 
+  @Post('generate')
+  generateWallet() {
+    // POW-style: Returns private key for client storage
+    return this.walletService.generateWallet();
+  }
+
   @Post('create')
   async createWallet(@Body() body: { userId: string }) {
-    this.logger.log(`Creating wallet for user: ${body.userId}`);
-    // Rate limited to 10 calls per minute
+    this.logger.log(`Creating managed wallet for user: ${body.userId}`);
+    // Backend-managed: Encrypts and stores key on backend
     return await this.walletService.createUserWallet(body.userId);
   }
 }
