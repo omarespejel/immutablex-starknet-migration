@@ -23,7 +23,7 @@ export class WalletService {
 
   // POW-style: Generate wallet and return private key for client storage
   generateWallet() {
-    this.logger.log('Generating POW-style wallet');
+    this.logger.log('[WALLET] Generating POW-style wallet');
 
     const privateKey = stark.randomAddress();
     const publicKey = ec.starkCurve.getStarkKey(privateKey);
@@ -37,7 +37,7 @@ export class WalletService {
       0
     );
 
-    this.logger.log(`Wallet generated: ${accountAddress}`);
+    this.logger.log(`[WALLET] Generated wallet: ${accountAddress.substring(0, 10)}...`);
 
     // Return private key for Unity to store on device
     return {
@@ -49,7 +49,7 @@ export class WalletService {
 
   // Backend-managed: Encrypt and store key on backend
   async createUserWallet(userId: string) {
-    this.logger.log(`Creating managed wallet for user: ${userId}`);
+    this.logger.log(`[WALLET] Creating managed wallet for user: ${userId}`);
 
     // Generate keys
     const privateKey = stark.randomAddress();
@@ -79,7 +79,7 @@ export class WalletService {
       priority: 1,
     });
 
-    this.logger.log(`Wallet created: ${accountAddress}`);
+    this.logger.log(`[WALLET] User ${userId} created wallet: ${accountAddress.substring(0, 10)}...`);
 
     return {
       address: accountAddress,

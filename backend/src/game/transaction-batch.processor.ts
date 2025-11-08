@@ -27,13 +27,14 @@ export class TransactionBatchProcessor {
   private async submitBatch() {
     if (this.actionBatch.length === 0) return;
 
-    this.logger.log(`Submitting batch of ${this.actionBatch.length} actions`);
+    this.logger.log(`[BATCH] Submitting batch of ${this.actionBatch.length} actions`);
 
     try {
       // Group by user and submit
       const userActions = this.groupByUser(this.actionBatch);
 
       for (const [userId, actions] of Object.entries(userActions)) {
+        this.logger.log(`[BATCH] Processing ${actions.length} actions for user ${userId}`);
         await this.submitUserBatch(userId, actions);
       }
 
