@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { backOff } from 'exponential-backoff';
+import { validateAndParseAddress } from 'starknet';
 import * as crypto from 'crypto';
 
 interface PaymasterCache {
@@ -58,10 +59,53 @@ export class PaymasterService {
       async () => {
         const headers = await this.getAuthHeaders();
 
-        const response = await fetch(`${this.getPaymasterUrl()}/sponsor`, {
+        // VALIDATE ADDRESS FORMAT (must be 66 chars: 0x + 64 hex)
+        let validUserAddress: string;
+        try {
+          validUserAddress = validateAndParseAddress(transaction.userAddress);
+        } catch (error: any) {
+          throw new Error(`Invalid user address format: ${error.message}. Address must be 66 characters (0x + 64 hex)`);
+        }
+
+        // Clean payload - remove undefined fields (AVNU doesn't like them)
+        const payload: any = {
+          userAddress: validUserAddress, // Now guaranteed to be 0x + 64 hex chars
+          calls: transaction.calls.map((call: any) => {
+            // Support both field name formats (to/contractAddress, entrypoint/selector)
+            const contractAddr = call.contractAddress || call.to;
+            const entrypoint = call.entrypoint || call.selector;
+            
+            // Validate contract address
+            let validContractAddr: string;
+            try {
+              validContractAddr = validateAndParseAddress(contractAddr);
+            } catch (error: any) {
+              throw new Error(`Invalid contract address format: ${error.message}`);
+            }
+
+            return {
+              to: validContractAddr,
+              contractAddress: validContractAddr, // Support both
+              entrypoint: entrypoint,
+              selector: entrypoint, // Support both
+              calldata: call.calldata || [],
+            };
+          }),
+        };
+
+        // Only add optional fields if they exist
+        if (transaction.gasTokenAddress) {
+          payload.gasTokenAddress = transaction.gasTokenAddress;
+        }
+        if (transaction.maxGasTokenAmount) {
+          payload.maxGasTokenAmount = transaction.maxGasTokenAmount;
+        }
+
+        // Use correct AVNU endpoint: /api/v1/paymaster/build (REST API, not JSON-RPC)
+        const response = await fetch(`${this.getPaymasterUrl()}/api/v1/paymaster/build`, {
           method: 'POST',
           headers,
-          body: JSON.stringify(transaction),
+          body: JSON.stringify(payload),
         });
 
         let responseData: any;
@@ -70,6 +114,11 @@ export class PaymasterService {
         } catch (e) {
           // If response is not JSON, use status text
           responseData = { error: response.statusText };
+        }
+
+        // Check for JSON-RPC error format (shouldn't happen with REST API)
+        if (responseData.error?.code === -32700) {
+          throw new Error('Payload format error - check AVNU documentation. Possible issues: invalid addresses, missing credits, or rate limiting');
         }
 
         // Handle specific error codes
@@ -99,15 +148,25 @@ export class PaymasterService {
   }
 
   async sponsorAccountDeployment(deployPayload: any): Promise<any> {
-    // Similar to sponsorTransaction but for account deployment
+    // Use build endpoint for account deployment as well
     const headers = await this.getAuthHeaders();
 
     return await backOff(
       async () => {
-        const response = await fetch(`${this.getPaymasterUrl()}/sponsor-account-deployment`, {
+        // Convert deployment payload to build format
+        const buildPayload = {
+          userAddress: deployPayload.contractAddress,
+          calls: [{
+            contractAddress: deployPayload.classHash,
+            entrypoint: 'deploy_account',
+            calldata: deployPayload.constructorCalldata || [],
+          }],
+        };
+
+        const response = await fetch(`${this.getPaymasterUrl()}/api/v1/paymaster/build`, {
           method: 'POST',
           headers,
-          body: JSON.stringify(deployPayload),
+          body: JSON.stringify(buildPayload),
         });
 
         if (!response.ok) {
@@ -136,6 +195,40 @@ export class PaymasterService {
         startingDelay: 2000,
       }
     );
+  }
+
+  async checkHealth(): Promise<any> {
+    const response = await fetch(`${this.getPaymasterUrl()}/health`);
+    return await response.json();
+  }
+
+  async getSupportedTokens(): Promise<any> {
+    // Gas tokens endpoint is not publicly documented in AVNU API
+    // Return empty array or contact AVNU for supported tokens
+    this.logger.warn('Gas tokens endpoint not publicly available. Contact AVNU for supported tokens.');
+    return [];
+  }
+
+  async getSponsorActivity(): Promise<any> {
+    const today = new Date();
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const headers = await this.getAuthHeaders();
+    // Correct endpoint: /api/v1/paymaster/activity (not /sponsor/activity)
+    const response = await fetch(
+      `${this.getPaymasterUrl()}/api/v1/paymaster/activity?` +
+      `startDate=${weekAgo.toISOString().split('T')[0]}&` +
+      `endDate=${today.toISOString().split('T')[0]}`,
+      {
+        headers,
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to get activity: ${response.statusText}`);
+    }
+
+    return await response.json();
   }
 
   private parsePaymasterError(status: number, data: any) {

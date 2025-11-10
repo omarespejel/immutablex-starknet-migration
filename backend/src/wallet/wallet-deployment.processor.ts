@@ -18,8 +18,13 @@ export class WalletDeploymentProcessor {
 
   private getProvider(): RpcProvider {
     if (!this.provider) {
+      // Updated for v0.9 RPC compatibility
       this.provider = new RpcProvider({
         nodeUrl: this.configService.get('STARKNET_RPC') || 'https://starknet-sepolia.public.blastapi.io',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        specVersion: '0.9.0',
       });
     }
     return this.provider;
@@ -83,8 +88,8 @@ export class WalletDeploymentProcessor {
       try {
         const receipt = await provider.getTransactionReceipt(txHash) as any;
 
-        // Check finality_status for acceptance (starknet.js v6 uses finality_status instead of status)
-        if (receipt.finality_status === 'ACCEPTED_ON_L2' || receipt.finality_status === 'ACCEPTED_ON_L1') {
+        // v8 uses status field (not finality_status)
+        if (receipt.status === 'ACCEPTED_ON_L2' || receipt.status === 'ACCEPTED_ON_L1') {
           return receipt;
         }
 
