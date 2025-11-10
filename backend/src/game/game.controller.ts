@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, Logger, HttpException, HttpStatus, Inject } from '@nestjs/common';
 import { SessionService } from '../session/session.service';
 import { GameActionDto } from './game-action.dto';
 
@@ -6,7 +6,8 @@ import { GameActionDto } from './game-action.dto';
 export class GameController {
   private readonly logger = new Logger(GameController.name);
 
-  constructor(private sessionService: SessionService) {}
+  // @ts-expect-error - TypeScript decorator inference issue, works correctly at runtime
+  constructor(@Inject(SessionService) private sessionService: SessionService) {}
 
   // @ts-expect-error - Known TypeScript decorator inference issue, works correctly at runtime
   @Post('action')

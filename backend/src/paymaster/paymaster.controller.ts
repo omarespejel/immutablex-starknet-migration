@@ -1,11 +1,11 @@
-import { Controller, Get, Post, Body, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Body, Logger, Inject } from '@nestjs/common';
 import { PaymasterService } from './paymaster.service';
 
 @Controller('paymaster')
 export class PaymasterController {
   private readonly logger = new Logger(PaymasterController.name);
 
-  constructor(private paymasterService: PaymasterService) {}
+  constructor(@Inject(PaymasterService) private paymasterService: PaymasterService) {}
 
   @Get('test')
   async testPaymaster() {

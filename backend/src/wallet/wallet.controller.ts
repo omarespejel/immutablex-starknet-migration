@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Logger, UseGuards, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, Logger, UseGuards, HttpException, HttpStatus, Inject } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { WalletService } from './wallet.service';
 import { CreateWalletDto } from './create-wallet.dto';
@@ -8,7 +8,7 @@ import { CreateWalletDto } from './create-wallet.dto';
 export class WalletController {
   private readonly logger = new Logger(WalletController.name);
 
-  constructor(private walletService: WalletService) {}
+  constructor(@Inject(WalletService) private walletService: WalletService) {}
 
   @Get('generate')
   generateWallet() {
