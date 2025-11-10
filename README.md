@@ -199,7 +199,61 @@ bun test:e2e
 
 # Paymaster integration
 bun run test/paymaster-test.ts
+
+# Transaction batching test
+bun run test/batch-test.ts
 ```
+
+### Testing Transaction Batching
+
+The batching system groups 100 actions together to save gas costs. Test it:
+
+**Quick Test (Backend):**
+
+```bash
+cd backend
+bun run test/batch-test.ts
+```
+
+This script:
+1. Generates a wallet
+2. Creates a session
+3. Sends 105 actions (triggers batch at 100)
+4. Shows batch positions and triggers
+
+**Unity Load Test:**
+
+1. Add `LoadTestBatching.cs` to a GameObject
+2. Set `actionsToSend` to 105
+3. Press Play
+4. Watch Console for batch trigger at action 100
+
+**Monitor Backend Logs:**
+
+Watch for batch submission:
+```
+[TransactionBatchProcessor] BATCH: Submitting batch of 100 actions
+[PaymasterService] Sponsoring transaction...
+```
+
+**Check Redis Queue:**
+
+```bash
+redis-cli -p 6379
+LLEN bull:transactions:wait
+```
+
+**What to Expect:**
+
+- Actions 0-99: Queued, batch position increments
+- Action 100: Batch triggers, first 100 actions submit
+- Actions 100+: New batch starts, position resets
+
+**Common Issues:**
+
+- **No batch submission:** Redis not running or `SKIP_REDIS=true` in .env
+- **Batch fails:** Wallet not deployed or paymaster not configured
+- **Queue disabled:** Check Redis connection and environment variables
 
 ## Production Considerations
 
