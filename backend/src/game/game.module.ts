@@ -8,13 +8,19 @@ import { PaymasterModule } from '../paymaster/paymaster.module';
 
 @Module({
   imports: [
-    BullModule.registerQueue({
-      name: 'transactions',
-    }),
+    ...(process.env.SKIP_REDIS !== 'true' ? [
+      BullModule.registerQueue({
+        name: 'transactions',
+      })
+    ] : []),
     SessionModule,
     PaymasterModule,
   ],
   controllers: [GameController],
-  providers: [TransactionBatchProcessor, TransactionReceiptGuard],
+  providers: [
+    TransactionReceiptGuard,
+    // Only register processor when queue is available
+    ...(process.env.SKIP_REDIS !== 'true' ? [TransactionBatchProcessor] : []),
+  ],
 })
 export class GameModule {}

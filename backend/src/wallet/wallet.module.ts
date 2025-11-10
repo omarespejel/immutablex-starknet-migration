@@ -7,25 +7,19 @@ import { PaymasterModule } from '../paymaster/paymaster.module';
 
 @Module({
   imports: [
-    BullModule.registerQueue({
-      name: 'wallet-deployment',
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
-        },
-        removeOnComplete: true,
-        removeOnFail: false,
-      },
-      settings: {
-        stalledInterval: 30000,
-        maxStalledCount: 1,
-      },
-    }),
+    // ADD CONDITIONAL CHECK like SessionModule and GameModule
+    ...(process.env.SKIP_REDIS !== 'true' ? [
+      BullModule.registerQueue({
+        name: 'wallet-deployment',
+      })
+    ] : []),
     PaymasterModule,
   ],
-  providers: [WalletService, WalletDeploymentProcessor],
+  providers: [
+    WalletService,
+    // Only register processor when queue is available
+    ...(process.env.SKIP_REDIS !== 'true' ? [WalletDeploymentProcessor] : []),
+  ],
   controllers: [WalletController],
   exports: [WalletService],
 })

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional, Inject } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { JwtService } from '@nestjs/jwt';
@@ -21,8 +21,8 @@ export class SessionService {
   private activeSessions = new Map<string, SessionKey>();
 
   constructor(
-    @InjectQueue('transactions') private txQueue: Queue,
-    private jwtService: JwtService,
+    @Optional() @InjectQueue('transactions') private txQueue?: Queue,
+    @Inject(JwtService) private jwtService: JwtService,
   ) {}
 
   async createSession(userId: string, walletAddress: string): Promise<string> {
@@ -61,18 +61,27 @@ export class SessionService {
     if (Date.now() > session.expiry) throw new Error('Session expired');
     if (!session.allowedMethods.includes(action.method)) throw new Error('Method not allowed');
 
-    await this.txQueue.add('batch-action', {
-      sessionId: decoded.sessionId,
-      userId: session.userId,
-      action,
-      timestamp: Date.now(),
-    });
+    if (this.txQueue) {
+      await this.txQueue.add('batch-action', {
+        sessionId: decoded.sessionId,
+        userId: session.userId,
+        action,
+        timestamp: Date.now(),
+      });
 
-    return {
-      success: true,
-      message: 'Action queued',
-      batchPosition: await this.txQueue.count(),
-    };
+      return {
+        success: true,
+        message: 'Action queued',
+        batchPosition: await this.txQueue.count(),
+      };
+    } else {
+      this.logger.warn('Transaction queue not available - action not queued');
+      return {
+        success: false,
+        message: 'Queue not available',
+        batchPosition: 0,
+      };
+    }
   }
 
   getSession(sessionId: string): SessionKey {

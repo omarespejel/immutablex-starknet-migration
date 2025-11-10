@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional, Inject } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 // @ts-expect-error - Queue must be runtime import for decorator, despite verbatimModuleSyntax
 import { Queue } from 'bull';
@@ -9,16 +9,30 @@ import * as crypto from 'crypto';
 @Injectable()
 export class WalletService {
   private readonly logger = new Logger(WalletService.name);
-  private provider: RpcProvider;
+  private provider: RpcProvider | null = null;
 
   constructor(
-    private configService: ConfigService,
+    @Inject(ConfigService) private configService: ConfigService,
+    // Make queue OPTIONAL so it doesn't break when SKIP_REDIS=true
+    @Optional()
     // @ts-expect-error - Known TypeScript decorator inference issue with Bull, works correctly at runtime
-    @InjectQueue('wallet-deployment') private deploymentQueue: Queue,
+    @InjectQueue('wallet-deployment') private deploymentQueue?: Queue,
   ) {
-    this.provider = new RpcProvider({
-      nodeUrl: this.configService.get('STARKNET_RPC'),
-    });
+    // RpcProvider initialization moved to lazy getter to avoid connection issues
+  }
+
+  private getProvider(): RpcProvider {
+    if (!this.provider) {
+      // Updated for v0.9 RPC compatibility
+      this.provider = new RpcProvider({
+        nodeUrl: this.configService.get('STARKNET_RPC') || 'https://starknet-sepolia.public.blastapi.io',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        specVersion: '0.9.0',
+      });
+    }
+    return this.provider;
   }
 
   // POW-style: Generate wallet and return private key for client storage
@@ -29,7 +43,7 @@ export class WalletService {
     const publicKey = ec.starkCurve.getStarkKey(privateKey);
 
     // Calculate account address
-    const accountClassHash = this.configService.get('ACCOUNT_CLASS_HASH');
+    const accountClassHash = this.configService.get('ACCOUNT_CLASS_HASH') || '0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f';
     const accountAddress = hash.calculateContractAddressFromHash(
       publicKey,
       accountClassHash,
@@ -56,7 +70,7 @@ export class WalletService {
     const publicKey = ec.starkCurve.getStarkKey(privateKey);
 
     // Calculate account address
-    const accountClassHash = this.configService.get('ACCOUNT_CLASS_HASH');
+    const accountClassHash = this.configService.get('ACCOUNT_CLASS_HASH') || '0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f';
     const accountAddress = hash.calculateContractAddressFromHash(
       publicKey,
       accountClassHash,
@@ -67,26 +81,38 @@ export class WalletService {
     // Encrypt private key
     const encryptedKey = this.encryptKey(privateKey, userId);
 
-    // Queue deployment instead of doing it synchronously
-    await this.deploymentQueue.add('deploy-account', {
-      userWallet: {
+    // Check if queue exists before using it
+    if (this.deploymentQueue) {
+      // Queue deployment instead of doing it synchronously
+      await this.deploymentQueue.add('deploy-account', {
+        userWallet: {
+          address: accountAddress,
+          publicKey,
+          userId,
+        },
+      }, {
+        delay: 5000, // Wait 5 seconds before deployment
+        priority: 1,
+      });
+
+      this.logger.log(`[WALLET] User ${userId} created wallet: ${accountAddress.substring(0, 10)}...`);
+
+      return {
         address: accountAddress,
         publicKey,
-        userId,
-      },
-    }, {
-      delay: 5000, // Wait 5 seconds before deployment
-      priority: 1,
-    });
-
-    this.logger.log(`[WALLET] User ${userId} created wallet: ${accountAddress.substring(0, 10)}...`);
-
-    return {
-      address: accountAddress,
-      publicKey,
-      encryptedPrivateKey: encryptedKey,
-      deploymentStatus: 'queued',
-    };
+        encryptedPrivateKey: encryptedKey,
+        deploymentStatus: 'queued',
+      };
+    } else {
+      // Queue not available - return without queuing
+      this.logger.warn('Deployment queue not available - skipping deployment');
+      return {
+        address: accountAddress,
+        publicKey,
+        encryptedPrivateKey: encryptedKey,
+        deploymentStatus: 'not_queued',
+      };
+    }
   }
 
   private encryptKey(privateKey: string, userId: string): string {

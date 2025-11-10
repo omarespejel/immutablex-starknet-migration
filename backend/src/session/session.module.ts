@@ -6,11 +6,13 @@ import { SessionController } from './session.controller';
 
 @Module({
   imports: [
-    BullModule.registerQueue({
-      name: 'transactions',
-    }),
+    ...(process.env.SKIP_REDIS !== 'true' ? [
+      BullModule.registerQueue({
+        name: 'transactions',
+      })
+    ] : []),
     JwtModule.register({
-      secret: process.env.JWT_SECRET,
+      secret: process.env.JWT_SECRET || 'dev-secret-key-change-in-production',
       signOptions: { expiresIn: '24h' },
     }),
   ],

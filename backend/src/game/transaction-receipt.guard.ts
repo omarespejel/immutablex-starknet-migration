@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { RpcProvider } from 'starknet';
@@ -12,16 +12,23 @@ export class TransactionReceiptGuard {
 
   constructor(
     private configService: ConfigService,
-    @InjectQueue('transactions') private txQueue: Queue,
+    @Optional() @InjectQueue('transactions') private txQueue?: Queue,
   ) {
-    // Check pending transactions every 10 seconds
-    setInterval(() => this.checkPendingTransactions(), 10000);
+    // Only start monitoring if queue is available
+    if (this.txQueue) {
+      setInterval(() => this.checkPendingTransactions(), 10000);
+    }
   }
 
   private getProvider(): RpcProvider {
     if (!this.provider) {
+      // Updated for v0.9 RPC compatibility
       this.provider = new RpcProvider({
         nodeUrl: this.configService.get('STARKNET_RPC') || 'https://starknet-sepolia.public.blastapi.io',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        specVersion: '0.9.0',
       });
     }
     return this.provider;
@@ -61,6 +68,11 @@ export class TransactionReceiptGuard {
   }
 
   private async requeueTransaction(data: any) {
+    if (!this.txQueue) {
+      this.logger.error('Cannot requeue - no queue available');
+      return;
+    }
+
     if (data.attempts < 3) {
       await this.txQueue.add('batch-action', {
         ...data,
