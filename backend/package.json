@@ -6,7 +6,8 @@
   "private": true,
   "scripts": {
     "start": "bun run dist/main.js",
-    "dev": "bun run --watch src/main.ts",
+    "dev": "SKIP_REDIS=true bun run --watch src/main.ts",
+    "dev:redis": "bun run --watch src/main.ts",
     "build": "bun build src/main.ts --target=node --outdir=dist",
     "test": "bun test",
     "test:watch": "bun test --watch",
@@ -47,6 +48,6 @@
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.2",
     "redis": "^5.9.0",
-    "starknet": "6.11.0"
+    "starknet": "^8.0.0"
   }
 }
