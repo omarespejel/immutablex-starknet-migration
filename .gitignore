@@ -6,3 +6,6 @@ build/
 
 # Generated context artifacts
 immutablex-starknet-migration-context-*.txt
+
+# Unity project directories (accidentally created)
+unity-client/immutablex-starknet-migration/
