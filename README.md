@@ -121,12 +121,18 @@ cp .env.example .env
 # Install dependencies
 bun install
 
-# Start Redis
+# Start Redis (required for batching)
 docker-compose up -d redis
 
 # Run backend
+# Option 1: With Redis (enables batching, wallet deployment queues)
+bun run dev:redis
+
+# Option 2: Without Redis (faster, no queues, no batching)
 bun run dev
 ```
+
+**Note:** The default `bun run dev` disables Redis for faster development. Use `bun run dev:redis` if you need batching or wallet deployment queues.
 
 The server runs on `http://localhost:3000`.
 
@@ -155,6 +161,8 @@ Session keys enable game actions without exposing the master key. They expire af
 ### Transaction Batching
 
 Game actions queue until we have 100, then batch submit to reduce gas costs. Failed transactions automatically retry with exponential backoff.
+
+**Requires Redis:** Batching only works when Redis is enabled. Use `bun run dev:redis` instead of `bun run dev`.
 
 ## Security Considerations
 
@@ -206,7 +214,16 @@ bun run test/batch-test.ts
 
 ### Testing Transaction Batching
 
-The batching system groups 100 actions together to save gas costs. Test it:
+The batching system groups 100 actions together to save gas costs. **Important:** Batching requires Redis to be enabled.
+
+**Start Backend WITH Redis (required for batching):**
+
+```bash
+cd backend
+bun run dev:redis  # Use this instead of 'bun run dev'
+```
+
+The default `bun run dev` sets `SKIP_REDIS=true` which disables batching. Use `dev:redis` to enable it.
 
 **Quick Test (Backend):**
 
